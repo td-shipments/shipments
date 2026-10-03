@@ -36,7 +36,7 @@ function LabList({ project }) {
       <ErrorBox error={err} />
       <div className="grid g2">
         <Card title={`${t('labp.queue')} (${queue.data?.length ?? '…'})`} flush actions={op && <button className="btn" disabled={!sel.length} onClick={() => { setErr(null); setModal(true); }}>{t('labp.create', { n: sel.length })}</button>}>
-          <div className="bd" style={{ paddingBottom: 0 }}><div className="small muted">{t('labp.createdNote')}</div>{op && queue.data?.length > 0 && <button className="btn sm ghost" style={{ marginTop: 8 }} onClick={() => setSel(sel.length === queue.data.length ? [] : queue.data.map((o) => o.id))}>{t('labp.select')}: {t('c.all')}</button>}</div>
+          <div className="inner tight"><div className="small muted">{t('labp.createdNote')}</div>{op && queue.data?.length > 0 && <button className="btn sm ghost" style={{ marginTop: 8 }} onClick={() => setSel(sel.length === queue.data.length ? [] : queue.data.map((o) => o.id))}>{t('labp.select')}: {t('c.all')}</button>}</div>
           {!queue.data ? <Loading /> : !queue.data.length ? <Empty>{t('c.none')}</Empty> : (
             <table className="t"><tbody>{queue.data.map((o) => (
               <tr key={o.id} className={`click ${sel.includes(o.id) ? 'sel' : ''}`} onClick={() => op && toggle(o.id)}>
@@ -118,7 +118,7 @@ function LabDetail({ project, id }) {
           {l.shipment?.last_status_text && <div className="small muted">{l.shipment.last_status_text}</div>}
         </Card>
         <Card title={`${t('labp.kits')} (${l.orders.length})`} className="span2" flush>
-          {op && l.status === 'PREPARING' && <div className="bd" style={{ paddingBottom: 0 }}><div className="small muted" style={{ marginBottom: 6 }}>{t('labp.scanAdd')}</div><BarcodeInput value={addCode} onChange={setAddCode} onEnter={(c) => act(() => api.put(`/lab/${id}`, { barcodes: [c || addCode] }).then(() => setAddCode('')))} /></div>}
+          {op && l.status === 'PREPARING' && <div className="inner tight"><div className="small muted" style={{ marginBottom: 6 }}>{t('labp.scanAdd')}</div><BarcodeInput value={addCode} onChange={setAddCode} onEnter={(c) => act(() => api.put(`/lab/${id}`, { barcodes: [c || addCode] }).then(() => setAddCode('')))} /></div>}
           <table className="t"><thead><tr><th>{t('c.kit')}</th><th>{t('c.ref')}</th><th>{t('c.patient')}</th><th>{t('ord.sampleOn')}</th><th>{t('c.status')}</th><th /></tr></thead>
             <tbody>{l.orders.map((o) => (
               <tr key={o.id}><td className="mono strong">{o.barcode}</td><td><Link to={`/${p}/richieste/${o.id}`} className="mono">{o.external_ref || `#${o.id}`}</Link></td><td>{patientName(o)}<div className="small muted">{o.city}</div></td><td className="small">{fdate(o.sample_received_at)}</td><td><span className="pill">{t(`st.${o.status}`)}</span></td>

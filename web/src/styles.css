@@ -325,3 +325,10 @@ pre.mail { white-space: pre-wrap; font: 12.5px/1.45 var(--mono); background: #fa
 .checkrow { display: flex; align-items: center; gap: 10px; cursor: pointer; }
 .kpi .val.sm { font-size: 18px; }
 @media (max-width: 860px) { .projects { grid-template-columns: 1fr; } .leg { grid-template-columns: 1fr; } }
+/* Blocchi interni alle card "flush": stesso respiro del corpo card */
+.card .inner { padding: 14px 18px; }
+.card .inner.tight { padding-bottom: 6px; }
+.card .inner.fee { border-top: 1px solid var(--line); background: #fafcfc; }
+.card .inner.fee label.f.inline { gap: 14px; font-weight: 700; color: var(--ink); }
+.card .inner.fee input { width: 120px; }
+.filters label.f { min-width: 150px; }

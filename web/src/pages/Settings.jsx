@@ -41,12 +41,12 @@ export default function Settings() {
       <ErrorBox error={err} />
       <div className="grid g3">
         <Card title={t('set.tariffs')} className="span2" flush actions={sup && <button className="btn sm" onClick={() => setMode({ project: 'ENDEAVOR', code: '', name_it: '', name_en: '', outbound_service: 'STANDARD', return_service: '', price: 0, email_aliases: '', active: true, sort: 100 })}>+ {t('c.new')}</button>}>
-          <div className="bd" style={{ paddingBottom: 0 }}><div className="small muted">{t('set.tariffsSub')}</div></div>
+          <div className="inner tight"><div className="small muted">{t('set.tariffsSub')}</div></div>
           <table className="t"><thead><tr><th>{t('c.mode')}</th><th>{t('ord.out')}</th><th>{t('ord.ret')}</th><th className="num">{t('set.price')}</th><th>{t('set.aliases')}</th><th /></tr></thead>
             <tbody>{(modes.data || []).map((m) => (
-              <tr key={m.id} style={m.active ? undefined : { opacity: .5 }}><td><div className="strong">{lang === 'en' ? m.name_en : m.name_it}</div><div className="small muted mono">{m.code}</div></td><td>{svc(m.outbound_service)}</td><td>{svc(m.return_service)}</td><td className="num strong">{Number(m.price).toFixed(2)}</td><td className="small muted" style={{ maxWidth: 260 }}>{m.email_aliases}</td>
+              <tr key={m.id} style={m.active ? undefined : { opacity: .5 }}><td><div className="strong">{lang === 'en' ? m.name_en : m.name_it}</div><div className="small muted mono">{m.code}</div></td><td>{svc(m.outbound_service)}</td><td>{svc(m.return_service)}</td><td className="num strong">{Number(m.price).toFixed(2)}</td><td style={{ maxWidth: 300 }}>{String(m.email_aliases || '').split('|').map((a) => a.trim()).filter(Boolean).map((a) => <span key={a} className="chip">{a}</span>)}</td>
                 <td className="num">{sup && <button className="btn sm ghost" onClick={() => setMode({ ...m, return_service: m.return_service || '', outbound_service: m.outbound_service || '', email_aliases: m.email_aliases || '' })}>{t('c.edit')}</button>}</td></tr>))}</tbody></table>
-          <div className="bd"><Field label={t('set.sampleFee')}><input type="number" step="0.01" value={s.sample_fee} disabled={!sup} onChange={(e) => setS({ ...s, sample_fee: e.target.value })} style={{ maxWidth: 160 }} /></Field></div>
+          <div className="inner fee"><Field label={t('set.sampleFee')} className="inline"><input type="number" step="0.01" value={s.sample_fee} disabled={!sup} onChange={(e) => setS({ ...s, sample_fee: e.target.value })} style={{ maxWidth: 160 }} /></Field></div>
         </Card>
         <div className="grid" style={{ alignContent: 'start' }}>
           <Card title={t('set.mail')}>

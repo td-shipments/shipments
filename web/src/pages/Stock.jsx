@@ -64,7 +64,7 @@ export default function Stock({ project }) {
           )}
         </Card>
         <Card title={t('stock.kits')} className="span2" flush>
-          <div className="bd" style={{ paddingBottom: 0 }}>
+          <div className="inner tight">
             <div className="filters" style={{ marginBottom: 10 }}>
               <Field label={t('stock.lookup')}><input value={q} onChange={(e) => setQ(e.target.value)} placeholder={t('c.barcode')} /></Field>
               <Field label={t('stock.filter')}><select value={status} onChange={(e) => setStatus(e.target.value)}><option value="">{t('c.all')}</option>{KSTATES.map((s) => <option key={s} value={s}>{t(`kst.${s}`)}</option>)}</select></Field>

@@ -60,13 +60,13 @@ export default function Dashboard({ project }) {
       </div>
       <div className="grid g2" style={{ marginBottom: 16 }}>
         <Card title={t('dash.overdue')} flush>
-          <div className="bd" style={{ paddingBottom: 0 }}><div className="small muted">{t('dash.overdueSub', { d: data.retDays })}</div></div>
+          <div className="inner tight"><div className="small muted">{t('dash.overdueSub', { d: data.retDays })}</div></div>
           {!data.overdue.length ? <div className="empty">{t('dash.allGood')}</div> : <table className="t"><tbody>{data.overdue.slice(0, 10).map((o) => (
             <tr key={o.id}><td><Link to={`/${p}/richieste/${o.id}`} className="strong mono">{o.external_ref || `#${o.id}`}</Link><div className="small">{patientName(o)}</div></td><td className="mono small">{o.barcode}</td><td className="small muted">{t('dash.deliveredOn')} {fdate(o.delivered_at)}</td><td className="num"><Badge tone="red">{daysSince(o.delivered_at)} {t('c.days')}</Badge></td></tr>))}</tbody></table>}
         </Card>
         {project === 'ENDEAVOR' ? (
           <Card title={t('dash.awb')} flush>
-            <div className="bd" style={{ paddingBottom: 0 }}><div className="small muted">{t('dash.awbSub', { d: data.awbDays })}</div></div>
+            <div className="inner tight"><div className="small muted">{t('dash.awbSub', { d: data.awbDays })}</div></div>
             {!data.awaiting.length ? <div className="empty">{t('dash.allGood')}</div> : <table className="t"><tbody>{data.awaiting.slice(0, 10).map((o) => (
               <tr key={o.id}><td><Link to={`/${p}/richieste/${o.id}`} className="strong mono">{o.external_ref || `#${o.id}`}</Link><div className="small">{patientName(o)}</div></td><td className="mono small">{o.barcode}</td><td className="small muted">{t('dash.receivedOn')} {fdate(o.sample_received_at)}</td><td className="num"><Badge tone="mauve">{daysSince(o.sample_received_at)} {t('c.days')}</Badge></td></tr>))}</tbody></table>}
           </Card>
