@@ -1,0 +1,60 @@
+# Deploy su Render: New > Blueprint > collega il repository "shipments".
+# Piani a pagamento: l'app resta sempre accesa (lettura casella, tracciamento e allarmi girano in automatico) e il database e' persistente con backup.
+services:
+  - type: web
+    name: td-shipments
+    runtime: docker
+    plan: starter
+    region: frankfurt
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: "3000"
+      - key: BASE_URL
+        value: https://shipments.toscanadiagnostica.it   # dominio ufficiale: gli altri host vengono reindirizzati qui
+      - key: DATABASE_URL
+        fromDatabase:
+          name: td-shipments-db
+          property: connectionString
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: SESSION_HOURS
+        value: "10"
+      - key: REQUIRE_TOTP_FOR_ADMINS
+        value: "true"
+      - key: SEED_SUPERADMIN_EMAIL
+        value: francesco.epifani@toscanadiagnostica.it
+      - key: SEED_SUPERADMIN_NAME
+        value: Francesco Epifani
+      - key: SEED_SUPERADMIN_PASSWORD
+        sync: false   # inserire a mano nel pannello (min 12 caratteri): richiesta al primo avvio, poi da cambiare al primo accesso
+      - key: ENTRA_TENANT_ID
+        sync: false   # gestite nel pannello Render: il Sync del Blueprint non le sovrascrive
+      - key: ENTRA_CLIENT_ID
+        sync: false
+      - key: ENTRA_CLIENT_SECRET
+        sync: false
+      - key: GRAPH_SENDER
+        value: shipments@toscanadiagnostica.it
+      - key: GRAPH_INBOX
+        value: shipments@toscanadiagnostica.it
+      - key: GRAPH_POLL_MINUTES
+        value: "5"
+      - key: TRACKING_PROVIDER
+        value: none   # 17track | aftership quando attivato
+      - key: TRACKING_API_KEY
+        sync: false
+      - key: FEDEX_CLIENT_ID
+        sync: false
+      - key: FEDEX_CLIENT_SECRET
+        sync: false
+      - key: TRACKING_POLL_MINUTES
+        value: "30"
+databases:
+  - name: td-shipments-db
+    plan: basic-256mb
+    region: frankfurt
+    databaseName: shipments
+    user: shipments
