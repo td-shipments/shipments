@@ -140,7 +140,7 @@ r.put('/kit-types/:id', requireRole('SUPERADMIN', 'ADMIN'), ah(async (req, res) 
 }));
 
 // ---------------- Impostazioni ----------------
-const SETTING_KEYS = ['sample_fee', 'billing_customer', 'billing_customer_address', 'affinity_notify_emails', 'affinity_sender_filter', 'lab_consignee', 'return_address', 'td_sites', 'alert_return_days', 'alert_awb_days', 'alert_stock_min', 'notify_patient_on_ship', 'notify_affinity_on_ship', 'notify_admins_email', 'retention_months', 'inbox_enabled'];
+const SETTING_KEYS = ['sample_fee', 'billing_customer', 'billing_customer_address', 'affinity_notify_emails', 'affinity_sender_filter', 'lab_consignee', 'return_address', 'td_sites', 'alert_return_days', 'alert_awb_days', 'alert_stock_min', 'notify_patient_on_ship', 'notify_affinity_on_ship', 'daily_alerts_enabled', 'notify_admins_email', 'retention_months', 'inbox_enabled'];
 const PUBLIC_KEYS = ['td_sites', 'return_address', 'lab_consignee', 'sample_fee', 'billing_customer'];
 r.get('/settings/public', ah(async (_req, res) => {
   const rows = await many('SELECT key, value FROM app_settings WHERE key = ANY($1)', [PUBLIC_KEYS]);

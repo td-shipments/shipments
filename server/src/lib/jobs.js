@@ -60,11 +60,13 @@ export async function runDailyAlerts({ force = false } = {}) {
   const last = await getSetting('alerts_last_run', '');
   const nowHour = Number(new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Rome', hour: '2-digit', hour12: false }).format(new Date()));
   if (!force && (last === today || nowHour < 8)) return null;
+  if ((await getSetting('daily_alerts_enabled', 'true')) !== 'true') { await q(`INSERT INTO app_settings (key, value) VALUES ('alerts_last_run', $1) ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value`, [today]); return { date: today, skipped: 'disabled' }; }
   const retDays = Number(await getSetting('alert_return_days', '21'));
   const awbDays = Number(await getSetting('alert_awb_days', '5'));
   const minStock = Number(await getSetting('alert_stock_min', '10'));
   const [ret, awb, stock] = await Promise.all([overdueReturns(retDays), awaitingAwb(awbDays), stockLevels()]);
-  const low = ['ENDEAVOR', 'LIFESTYLE'].map((p) => ({ project: p, n: stock.find((s) => s.project === p)?.n || 0 })).filter((s) => s.n < minStock);
+  // soglia 0 = controllo scorte disattivato
+  const low = minStock > 0 ? ['ENDEAVOR', 'LIFESTYLE'].map((p) => ({ project: p, n: stock.find((s) => s.project === p)?.n || 0 })).filter((s) => s.n < minStock) : [];
   const admins = await adminEmails();
   const lines = [];
   if (ret.length) lines.push(`Campioni non rientrati dopo ${retDays} giorni dalla consegna del kit: ${ret.length}\n${ret.map((o) => `• ${o.external_ref || '#' + o.id} ${o.patient_last_name} ${o.patient_first_name}, kit ${o.barcode || '-'}, consegnato il ${itDate(o.delivered_at?.toISOString?.() || o.delivered_at)}`).join('\n')}`);

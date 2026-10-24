@@ -8,8 +8,8 @@ import { fdt } from '../format.js';
 const TEXT = ['billing_customer', 'billing_customer_address', 'affinity_notify_emails', 'affinity_sender_filter', 'notify_admins_email', 'td_sites'];
 const AREA = ['lab_consignee', 'return_address'];
 const NUMS = ['sample_fee', 'alert_return_days', 'alert_awb_days', 'alert_stock_min', 'retention_months'];
-const BOOLS = ['notify_patient_on_ship', 'notify_affinity_on_ship', 'inbox_enabled'];
-const LABEL = { sample_fee: 'set.sampleFee', billing_customer: 'set.customer', billing_customer_address: 'set.customerAddr', affinity_notify_emails: 'set.notify', affinity_sender_filter: 'set.senderFilter', lab_consignee: 'set.consignee', return_address: 'set.returnAddr', td_sites: 'set.sites', alert_return_days: 'set.alertReturn', alert_awb_days: 'set.alertAwb', alert_stock_min: 'set.alertStock', notify_patient_on_ship: 'set.notifyPatient', notify_affinity_on_ship: 'set.notifyAffinityShip', notify_admins_email: 'set.adminsEmail', retention_months: 'set.retention', inbox_enabled: 'set.inbox' };
+const BOOLS = ['daily_alerts_enabled', 'notify_patient_on_ship', 'notify_affinity_on_ship', 'inbox_enabled'];
+const LABEL = { sample_fee: 'set.sampleFee', billing_customer: 'set.customer', billing_customer_address: 'set.customerAddr', affinity_notify_emails: 'set.notify', affinity_sender_filter: 'set.senderFilter', lab_consignee: 'set.consignee', return_address: 'set.returnAddr', td_sites: 'set.sites', alert_return_days: 'set.alertReturn', alert_awb_days: 'set.alertAwb', alert_stock_min: 'set.alertStock', daily_alerts_enabled: 'set.dailyAlerts', notify_patient_on_ship: 'set.notifyPatient', notify_affinity_on_ship: 'set.notifyAffinityShip', notify_admins_email: 'set.adminsEmail', retention_months: 'set.retention', inbox_enabled: 'set.inbox' };
 
 export default function Settings() {
   const { t, lang } = useT();
