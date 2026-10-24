@@ -23,6 +23,7 @@ export async function pollInbox({ force = false } = {}) {
     last = m.receivedDateTime > last ? m.receivedDateTime : last;
     if (await one('SELECT 1 FROM inbox_messages WHERE graph_id=$1', [m.id])) continue;
     const from = m.from?.emailAddress?.address || '';
+    if (from.toLowerCase() === config.graph.inbox.toLowerCase()) continue; // risposte inviate dalla casella stessa: non sono richieste
     const text = m.body?.contentType === 'html' ? htmlToText(m.body.content) : (m.body?.content || m.bodyPreview || '');
     const looksLikeKit = /kit/i.test(m.subject || '') || /kit/i.test(text.slice(0, 400));
     const fromOk = !senderFilter.length || senderFilter.some((d) => from.toLowerCase().endsWith(d));

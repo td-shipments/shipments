@@ -1,9 +1,17 @@
 // Configurazione da variabili d'ambiente
 const env = process.env;
 
+// BASE_URL: senza barre finali; https obbligatorio sui domini pubblici (http solo in locale)
+function normalizeBaseUrl(v) {
+  let u = String(v || 'http://localhost:3000').trim().replace(/\/+$/, '');
+  if (!/^https?:\/\//i.test(u)) u = `https://${u}`;
+  if (/^http:\/\//i.test(u) && !/localhost|127\.0\.0\.1/.test(u)) u = u.replace(/^http:/i, 'https:');
+  return u;
+}
+
 export const config = {
   port: Number(env.PORT || 3000),
-  baseUrl: env.BASE_URL || 'http://localhost:3000',
+  baseUrl: normalizeBaseUrl(env.BASE_URL),
   databaseUrl: env.DATABASE_URL || 'postgres://postgres@localhost:5432/shipments',
   sessionSecret: env.SESSION_SECRET || 'dev-only-change-me',
   secureCookies: env.NODE_ENV === 'production',

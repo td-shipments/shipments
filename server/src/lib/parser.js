@@ -10,7 +10,10 @@
 //   TEL: 00393342107111
 // Il parser è tollerante: ogni campo non riconosciuto resta vuoto e l'operatore lo completa prima della conferma.
 
-const REF_LINE = /^\s*([A-Z]{2,6}\d{4,}[A-Z]{0,4})\s*[-–:]\s*(.+?)\s*$/i;
+// Codice ordine: lettere iniziali, poi lettere/numeri/trattini con almeno 4 cifre consecutive (AFF298672IT, AFF-PLIN232651IT, EDNA-12345-IT).
+// La modalità può seguire sullo stesso rigo dopo - – : | oppure stare sul rigo successivo.
+const REF_LINE = /^\s*(?:order|ordine|ref\.?|kit|codice)?\s*[:#]?\s*([A-Z]{2,}[A-Z0-9-]*\d{4,}[A-Z0-9-]*)\s*(?:[-–:|]\s*(.+?))?\s*$/i;
+const MODE_WORDS = /\b(standard|express|sda|return|ritorno|outbound|andata)\b/i;
 const TITLE_RE = /^(mr|mrs|ms|miss|dr|sig|sig\.ra|sig\.na|sigra|dott|dott\.ssa|prof)\.?\s+/i;
 const PHONE_RE = /^(tel|phone|telefono|mobile|cell)\.?\s*[:.]?\s*(.+)$/i;
 const ZIP_RE = /^\d{5}$/;
@@ -45,8 +48,11 @@ export function parseKitEmail(text, modes = []) {
   let cur = null;
   for (const line of lines) {
     const m = line.match(REF_LINE);
-    if (m) { cur = { ref: m[1].toUpperCase(), modeText: m[2].trim(), lines: [] }; blocks.push(cur); continue; }
+    if (m && !/^(tel|phone|cap|zip)/i.test(line)) { cur = { ref: m[1].toUpperCase(), modeText: (m[2] || '').trim(), lines: [], awaitMode: !m[2] }; blocks.push(cur); continue; }
     if (!cur) continue;
+    // modalità sul rigo successivo al codice (es. "Standard SDA" da solo)
+    if (cur.awaitMode && line && MODE_WORDS.test(line) && line.split(/\s+/).length <= 6 && !TITLE_RE.test(line)) { cur.modeText = line; cur.awaitMode = false; continue; }
+    cur.awaitMode = false;
     if (!line) { if (cur.lines.length) cur.closed = true; continue; }
     if (cur.closed) continue;
     if (/^(thanks|regards|kind regards|best regards|administration|cordiali|grazie)/i.test(line)) { cur.closed = true; continue; }
