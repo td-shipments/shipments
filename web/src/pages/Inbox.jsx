@@ -30,13 +30,13 @@ export default function Inbox({ project }) {
     try { const r = await api.post('/orders/inbox/paste', { text: paste.text, subject: paste.subject || null }); setPaste(null); inbox.reload(); if (r.status === 'PARSED') openReview(r); else toast(t('inbox.noKits'), 'err'); } catch (e) { setErr(e); }
   };
   const openReview = (m) => {
-    const items = (m.parsed || []).map((b) => ({ ...emptyOrder('ENDEAVOR'), external_ref: b.external_ref, shipping_mode_id: b.mode?.id || '', mode_text: b.mode_text, warnings: b.warnings || [], patient_title: b.patient_title || '', patient_first_name: b.patient_first_name, patient_last_name: b.patient_last_name, address1: b.address1, address2: b.address2 || '', city: b.city, province: b.province || '', zip: b.zip || '', country: b.country || 'Italia', phone: b.phone || '', lang: 'en' }));
+    const items = (m.parsed || []).map((b) => ({ ...emptyOrder('ENDEAVOR'), external_ref: b.external_ref, shipping_mode_id: b.mode?.id || '', mode_text: b.mode_text, warnings: b.warnings || [], barcode: b.in_stock ? b.external_ref : '', in_stock: !!b.in_stock, kit_status: b.kit_status || null, patient_title: b.patient_title || '', patient_first_name: b.patient_first_name, patient_last_name: b.patient_last_name, address1: b.address1, address2: b.address2 || '', city: b.city, province: b.province || '', zip: b.zip || '', country: b.country || 'Italia', phone: b.phone || '', lang: 'en' }));
     setReview({ msg: m, items: items.length ? items : [emptyOrder('ENDEAVOR')] });
   };
   const confirm = async () => {
     setErr(null);
     try {
-      const items = review.items.map(({ mode_text, warnings, ...x }) => ({ ...x, shipping_mode_id: x.shipping_mode_id || null, email: x.email || null, barcode: x.barcode || null }));
+      const items = review.items.map(({ mode_text, warnings, in_stock, kit_status, ...x }) => ({ ...x, shipping_mode_id: x.shipping_mode_id || null, email: x.email || null, barcode: x.barcode || null }));
       const r = await api.post(`/orders/inbox/${review.msg.id}/confirm`, { items });
       toast(`${t('inbox.created')}: ${r.order_ids.length}`); setReview(null); inbox.reload(); newOrders.reload();
       if (r.order_ids.length === 1) nav(`/${p}/richieste/${r.order_ids[0]}`);
@@ -48,6 +48,7 @@ export default function Inbox({ project }) {
     setErr(null);
     try { const o = await api.post('/orders', { ...manual, shipping_mode_id: manual.shipping_mode_id || null, email: manual.email || null, barcode: manual.barcode || null }); toast(t('c.saved')); setManual(null); nav(`/${p}/richieste/${o.id}`); } catch (e) { setErr(e); }
   };
+  const reparseAll = async () => { try { const r = await api.post('/orders/inbox/reparse-all'); toast(`${r.recognized} / ${r.total}`); inbox.reload(); } catch (e) { setErr(e); } };
   const runInbox = async () => { try { const r = await api.post('/settings/run/inbox'); toast(JSON.stringify(r)); inbox.reload(); } catch (e) { setErr(e); } };
   const mailCfg = settings.data?.mail;
 
@@ -64,7 +65,7 @@ export default function Inbox({ project }) {
         </div>
       )}
       {project === 'ENDEAVOR' && <>
-        <div className="tabs">{[['pending', t('inbox.pending')], ['done', t('inbox.done')], ['ignored', t('inbox.ignored')]].map(([k, l]) => <button key={k} className={tab === k ? 'on' : ''} onClick={() => setTab(k)}>{l}</button>)}</div>
+        <div className="tabs" style={{ alignItems: 'center' }}>{[['pending', t('inbox.pending')], ['done', t('inbox.done')], ['ignored', t('inbox.ignored')]].map(([k, l]) => <button key={k} className={tab === k ? 'on' : ''} onClick={() => setTab(k)}>{l}</button>)}<div className="spacer" />{op && tab === 'pending' && <button className="btn sm ghost" style={{ marginBottom: 6 }} onClick={reparseAll}>{t('inbox.reparseAll')}</button>}</div>
         {!inbox.data ? <Loading /> : !inbox.data.length ? <Card><Empty>{t('c.none')}</Empty></Card> : (
           <div className="rowlist" style={{ marginBottom: 20 }}>
             {inbox.data.map((m) => (
@@ -78,7 +79,7 @@ export default function Inbox({ project }) {
                           {op && <><button className="btn sm" onClick={() => openReview(m)}>{t('inbox.review')}</button><button className="btn sm ghost" onClick={() => reparse(m)}>{t('inbox.reparse')}</button><button className="btn sm ghost" onClick={() => ignore(m)}>{t('inbox.ignore')}</button></>}</>}
                   </div>
                 </div>
-                {(m.parsed || []).length > 0 && m.status !== 'CONFIRMED' && <div className="row small">{m.parsed.map((b, i) => <span key={i} className="chip">{b.external_ref} · {b.patient_first_name} {b.patient_last_name} · {b.mode ? (lang === 'en' ? modes.data?.find((x) => x.id === b.mode.id)?.name_en : modes.data?.find((x) => x.id === b.mode.id)?.name_it) : <span className="red">{b.mode_text}?</span>}</span>)}</div>}
+                {(m.parsed || []).length > 0 && m.status !== 'CONFIRMED' && <div className="row small">{m.parsed.map((b, i) => <span key={i} className="chip" style={b.in_stock ? undefined : { background: 'var(--red-100)', color: 'var(--red)' }}>{b.external_ref} · {b.in_stock ? t('inbox.inStock') : b.kit_known ? t(`kst.${b.kit_status}`) : t('inbox.notInStock')} · {b.patient_first_name} {b.patient_last_name} · {b.mode ? (lang === 'en' ? modes.data?.find((x) => x.id === b.mode.id)?.name_en : modes.data?.find((x) => x.id === b.mode.id)?.name_it) : <span className="red">{b.mode_text || '?'}</span>}</span>)}</div>}
                 <details style={{ marginTop: 8 }}><summary className="small muted" style={{ cursor: 'pointer' }}>{t('inbox.body')}</summary><pre className="mail">{m.body_text}</pre></details>
               </div>))}
           </div>

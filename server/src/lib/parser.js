@@ -1,5 +1,8 @@
 // Lettura delle email "Kits to send out" di Affinity / Endeavor DNA.
-// Formato atteso (un blocco per kit):
+// Principio: il codice scritto nell'email (oggetto o testo) è il codice a barre del kit. Il riconoscimento parte quindi
+// dall'elenco dei kit caricati a magazzino (qualunque formato di codice) e, in subordine, da qualunque token che
+// somigli a un codice. Per ogni kit trovato si ricavano dal testo nome, indirizzo, telefono e modalità di spedizione.
+// Formato tipico di un blocco:
 //   AFF298672IT - Standard SDA
 //   Ms. Andrea Green
 //   CAMPING LA ROCCIA, VIA MADONNA 84
@@ -10,24 +13,27 @@
 //   TEL: 00393342107111
 // Il parser è tollerante: ogni campo non riconosciuto resta vuoto e l'operatore lo completa prima della conferma.
 
-// Codice ordine: lettere iniziali, poi lettere/numeri/trattini con almeno 4 cifre consecutive (AFF298672IT, AFF-PLIN232651IT, EDNA-12345-IT).
-// La modalità può seguire sullo stesso rigo dopo - – : | oppure stare sul rigo successivo.
-const REF_LINE = /^\s*(?:order|ordine|ref\.?|kit|codice)?\s*[:#]?\s*([A-Z]{2,}[A-Z0-9-]*\d{4,}[A-Z0-9-]*)\s*(?:[-–:|]\s*(.+?))?\s*$/i;
-const MODE_WORDS = /\b(standard|express|sda|return|ritorno|outbound|andata)\b/i;
-const TITLE_RE = /^(mr|mrs|ms|miss|dr|sig|sig\.ra|sig\.na|sigra|dott|dott\.ssa|prof)\.?\s+/i;
-const PHONE_RE = /^(tel|phone|telefono|mobile|cell)\.?\s*[:.]?\s*(.+)$/i;
+const TOKEN_SRC = '[A-Z][A-Z0-9-]{3,}[A-Z0-9]';                      // candidati codice: lettere/numeri/trattini
+const tokens = (s) => [...String(s).matchAll(new RegExp(TOKEN_SRC, 'gi'))].map((m) => m[0]); // regex nuova a ogni uso: niente lastIndex condiviso
+const hasToken = (s) => new RegExp(TOKEN_SRC, 'i').test(s);
+const LOOKS_LIKE_CODE = /^(?=.*\d{3,})[A-Z][A-Z0-9-]{5,}$/i;     // fallback: almeno 3 cifre, lunghezza minima
+const TITLE_RE = /^(mr|mrs|ms|miss|mx|dr|sig|sig\.ra|sig\.na|sigra|dott|dott\.ssa|prof)\.?\s+/i;
+const PHONE_RE = /^(tel|phone|telefono|mobile|cell|cellulare)\.?\s*[:.]?\s*(.+)$/i;
 const ZIP_RE = /^\d{5}$/;
+const HEADER_RE = /^(da|from|a|to|cc|ccn|bcc|inviato|sent|date|data|oggetto|subject|re|r|fw|fwd|i)\s*:/i;
+const NOISE_RE = /^(hi|hello|dear|ciao|buongiorno|good morning|could you|please|thanks|thank you|regards|kind regards|best regards|administration|cordiali|grazie|saluti|inviato da|sent from|www\.|http)/i;
+const MODE_WORDS = /\b(standard|express|sda|return|ritorno|outbound|andata|solo|only)\b/i;
 const COUNTRIES = ['italy', 'italia', 'san marino', 'vatican', 'vaticano', 'switzerland', 'svizzera', 'france', 'francia', 'germany', 'germania', 'spain', 'spagna', 'austria', 'slovenia', 'malta', 'united kingdom', 'uk'];
 
 export function htmlToText(html) {
   return String(html || '')
     .replace(/<style[\s\S]*?<\/style>/gi, '').replace(/<script[\s\S]*?<\/script>/gi, '')
-    .replace(/<br\s*\/?>/gi, '\n').replace(/<\/(p|div|tr|li|h\d)>/gi, '\n')
+    .replace(/<br\s*\/?>/gi, '\n').replace(/<\/(p|div|tr|li|h\d)>/gi, '\n').replace(/<\/t[dh]>/gi, ' ')
     .replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'")
     .replace(/\r/g, '').replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
 }
 
-// Riconosce la modalità di spedizione dalla frase dell'email usando gli alias configurati nel tariffario
+// Riconosce la modalità di spedizione da una frase usando gli alias configurati nel tariffario
 export function matchMode(text, modes) {
   const t = String(text || '').toLowerCase().replace(/\s+/g, ' ').trim();
   if (!t) return null;
@@ -42,31 +48,104 @@ export function matchMode(text, modes) {
   return best ? { id: best.id, code: best.code, exact: best.exact } : null;
 }
 
-export function parseKitEmail(text, modes = []) {
-  const lines = htmlToText(text).split('\n').map((l) => l.trim());
-  const blocks = [];
-  let cur = null;
-  for (const line of lines) {
-    const m = line.match(REF_LINE);
-    if (m && !/^(tel|phone|cap|zip)/i.test(line)) { cur = { ref: m[1].toUpperCase(), modeText: (m[2] || '').trim(), lines: [], awaitMode: !m[2] }; blocks.push(cur); continue; }
-    if (!cur) continue;
-    // modalità sul rigo successivo al codice (es. "Standard SDA" da solo)
-    if (cur.awaitMode && line && MODE_WORDS.test(line) && line.split(/\s+/).length <= 6 && !TITLE_RE.test(line)) { cur.modeText = line; cur.awaitMode = false; continue; }
-    cur.awaitMode = false;
-    if (!line) { if (cur.lines.length) cur.closed = true; continue; }
-    if (cur.closed) continue;
-    if (/^(thanks|regards|kind regards|best regards|administration|cordiali|grazie)/i.test(line)) { cur.closed = true; continue; }
-    cur.lines.push(line);
+const norm = (s) => String(s || '').toUpperCase().replace(/\s+/g, '');
+const isHeader = (l) => HEADER_RE.test(l);
+
+/**
+ * parseKitEmail(text, modes, { subject, knownCodes })
+ *  knownCodes: elenco dei codici a barre presenti nel sistema (qualunque stato) oppure mappa { CODICE: stato }
+ * Ritorna un blocco per codice trovato, con in_stock / kit_status quando il codice è a magazzino.
+ */
+export function parseKitEmail(text, modes = [], opts = {}) {
+  const subject = String(opts.subject || '');
+  const known = new Map();
+  if (opts.knownCodes) {
+    if (Array.isArray(opts.knownCodes)) for (const k of opts.knownCodes) known.set(norm(typeof k === 'string' ? k : k.barcode), typeof k === 'string' ? null : k.status);
+    else for (const [k, v] of Object.entries(opts.knownCodes)) known.set(norm(k), v);
   }
-  return blocks.map((b) => {
-    const r = { external_ref: b.ref, mode_text: b.modeText, mode: matchMode(b.modeText, modes), patient_title: null, patient_first_name: '', patient_last_name: '', address1: '', address2: null, city: '', province: null, zip: null, country: 'Italia', phone: null, warnings: [] };
+  const body = htmlToText(text);
+  const lines = body.split('\n').map((l) => l.trim());
+
+  // 1) candidati: prima i codici noti a magazzino, poi quelli che somigliano a un codice
+  const found = [];     // { code, lineIdx, fromSubject }
+  const seen = new Set();
+  const consider = (raw, lineIdx, fromSubject) => {
+    const code = norm(raw);
+    if (seen.has(code)) return;
+    const isKnown = known.has(code);
+    if (!isKnown && !LOOKS_LIKE_CODE.test(code)) return;
+    if (!isKnown && /^(TEL|CAP|ZIP|IBAN|AFF|AFFINITY|SDA|FEDEX|AWB)$/i.test(code)) return;
+    seen.add(code);
+    found.push({ code, lineIdx, fromSubject });
+  };
+  lines.forEach((l, i) => { if (isHeader(l)) return; for (const tk of tokens(l)) consider(tk, i, false); });
+  // righe di intestazione citate (inoltri) e oggetto: il codice conta, ma la riga non è l'inizio del blocco
+  lines.forEach((l) => { if (isHeader(l)) for (const tk of tokens(l)) consider(tk, -1, true); });
+  for (const tk of tokens(subject)) consider(tk, -1, true);
+  // tiene solo i noti se ce ne sono (evita falsi positivi tipo parole in maiuscolo); altrimenti tutti i candidati plausibili
+  const knownFound = found.filter((f) => known.has(f.code));
+  const candidates = knownFound.length ? knownFound : found.filter((f) => /\d{4,}/.test(f.code));
+  if (!candidates.length) return [];
+
+  // 2) per ogni candidato individua il blocco di righe con i dati del paziente
+  const codeLineIdx = new Set(candidates.filter((c) => c.lineIdx >= 0).map((c) => c.lineIdx));
+  const blockFrom = (start) => {
+    const out = [];
+    for (let i = start; i < lines.length; i++) {
+      const l = lines[i];
+      if (!l) { if (out.length) break; else continue; }
+      if (i !== start && codeLineIdx.has(i)) break;
+      if (isHeader(l) || /^(thanks|regards|kind regards|best regards|administration|cordiali|grazie|saluti|inviato da|sent from)/i.test(l)) break;
+      if (i === start) continue; // la riga del codice stesso
+      out.push(l);
+    }
+    return out;
+  };
+  // blocco generico: primo gruppo di righe che contiene un telefono o un CAP (per codici presenti solo in oggetto/intestazione)
+  const genericBlock = () => {
+    let start = -1;
+    for (let i = 0; i < lines.length; i++) {
+      if (!lines[i] || isHeader(lines[i]) || NOISE_RE.test(lines[i]) || codeLineIdx.has(i)) { start = -1; continue; }
+      if (start < 0) start = i;
+      if (PHONE_RE.test(lines[i]) || ZIP_RE.test(lines[i]) || COUNTRIES.includes(lines[i].toLowerCase())) {
+        const out = [];
+        for (let j = start; j < lines.length && lines[j]; j++) if (!isHeader(lines[j]) && !NOISE_RE.test(lines[j])) out.push(lines[j]);
+        return out;
+      }
+    }
+    return [];
+  };
+
+  const results = [];
+  for (const c of candidates) {
+    const r = { external_ref: c.code, mode_text: '', mode: null, in_stock: known.get(c.code) === 'IN_STOCK', kit_known: known.has(c.code), kit_status: known.get(c.code) || null,
+      patient_title: null, patient_first_name: '', patient_last_name: '', address1: '', address2: null, city: '', province: null, zip: null, country: 'Italia', phone: null, warnings: [] };
+    let block = [];
+    if (c.lineIdx >= 0) {
+      // testo della modalità: resto della riga del codice, depurato da altri codici e separatori
+      let rest = lines[c.lineIdx];
+      for (const k of candidates) rest = rest.replace(new RegExp(k.code.replace(/[-]/g, '\\-'), 'ig'), ' ');
+      rest = rest.replace(/^[\s,;:|–-]+|[\s,;:|–-]+$/g, '').replace(/\s*[,;|]\s*/g, ' ').trim();
+      r.mode_text = rest;
+      block = blockFrom(c.lineIdx);
+      if (!r.mode_text && block.length && MODE_WORDS.test(block[0]) && block[0].split(/\s+/).length <= 6 && !TITLE_RE.test(block[0])) r.mode_text = block.shift();
+    } else {
+      block = genericBlock();
+      if (block.length && MODE_WORDS.test(block[0]) && block[0].split(/\s+/).length <= 6 && !TITLE_RE.test(block[0])) r.mode_text = block.shift();
+    }
+    if (!r.mode_text) { // cerca la modalità in qualunque riga breve del testo
+      const l = lines.find((x) => x && !isHeader(x) && MODE_WORDS.test(x) && x.split(/\s+/).length <= 6 && !TITLE_RE.test(x) && !hasToken(x.replace(/\b(SDA)\b/ig, '')));
+      if (l) r.mode_text = l;
+    }
+    r.mode = matchMode(r.mode_text, modes) || (r.mode_text ? null : matchMode(body.split('\n').filter((x) => MODE_WORDS.test(x) && x.length < 80).join(' | '), modes));
+
     const rest = [];
-    for (const l of b.lines) {
+    for (const l of block) {
       const p = l.match(PHONE_RE);
       if (p) { r.phone = p[2].replace(/[^\d+]/g, ''); continue; }
+      if (/^[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}$/i.test(l)) { r.email = l.toLowerCase(); continue; }
       rest.push(l);
     }
-    // 1a riga: nome
     if (rest.length) {
       let name = rest.shift();
       const t = name.match(TITLE_RE);
@@ -76,10 +155,9 @@ export function parseKitEmail(text, modes = []) {
       r.patient_last_name = parts.join(' ');
       if (!r.patient_last_name) { r.patient_last_name = r.patient_first_name; r.patient_first_name = ''; r.warnings.push('name'); }
     }
-    // ultima riga paese, poi CAP, poi provincia, poi città; il resto è indirizzo
     if (rest.length && COUNTRIES.includes(rest[rest.length - 1].toLowerCase())) {
-      const c = rest.pop().toLowerCase();
-      r.country = (c === 'italy' || c === 'italia') ? 'Italia' : rest.length ? capitalize(c) : 'Italia';
+      const cn = rest.pop().toLowerCase();
+      r.country = (cn === 'italy' || cn === 'italia') ? 'Italia' : capitalize(cn);
     }
     const zipIdx = rest.findIndex((l) => ZIP_RE.test(l));
     if (zipIdx >= 0) { r.zip = rest[zipIdx]; rest.splice(zipIdx, 1); }
@@ -91,8 +169,11 @@ export function parseKitEmail(text, modes = []) {
     if (!r.address1) r.warnings.push('address');
     if (!r.city) r.warnings.push('city');
     if (!r.mode) r.warnings.push('mode');
-    return r;
-  });
+    if (!r.kit_known) r.warnings.push('kit_unknown');
+    else if (!r.in_stock) r.warnings.push('kit_not_available');
+    results.push(r);
+  }
+  return results;
 }
 
 const PROVINCES = { agrigento: 'AG', alessandria: 'AL', ancona: 'AN', aosta: 'AO', arezzo: 'AR', 'ascoli piceno': 'AP', asti: 'AT', avellino: 'AV', bari: 'BA', 'barletta-andria-trani': 'BT', belluno: 'BL', benevento: 'BN', bergamo: 'BG', biella: 'BI', bologna: 'BO', bolzano: 'BZ', brescia: 'BS', brindisi: 'BR', cagliari: 'CA', caltanissetta: 'CL', campobasso: 'CB', caserta: 'CE', catania: 'CT', catanzaro: 'CZ', chieti: 'CH', como: 'CO', cosenza: 'CS', cremona: 'CR', crotone: 'KR', cuneo: 'CN', enna: 'EN', fermo: 'FM', ferrara: 'FE', firenze: 'FI', foggia: 'FG', 'forli-cesena': 'FC', 'forlì-cesena': 'FC', frosinone: 'FR', genova: 'GE', gorizia: 'GO', grosseto: 'GR', imperia: 'IM', isernia: 'IS', 'la spezia': 'SP', "l'aquila": 'AQ', latina: 'LT', lecce: 'LE', lecco: 'LC', livorno: 'LI', lodi: 'LO', lucca: 'LU', macerata: 'MC', mantova: 'MN', 'massa-carrara': 'MS', 'massa carrara': 'MS', matera: 'MT', messina: 'ME', milano: 'MI', modena: 'MO', 'monza e brianza': 'MB', 'monza e della brianza': 'MB', napoli: 'NA', novara: 'NO', nuoro: 'NU', oristano: 'OR', padova: 'PD', palermo: 'PA', parma: 'PR', pavia: 'PV', perugia: 'PG', 'pesaro e urbino': 'PU', pescara: 'PE', piacenza: 'PC', pisa: 'PI', pistoia: 'PT', pordenone: 'PN', potenza: 'PZ', prato: 'PO', ragusa: 'RG', ravenna: 'RA', 'reggio calabria': 'RC', 'reggio emilia': 'RE', rieti: 'RI', rimini: 'RN', roma: 'RM', rovigo: 'RO', salerno: 'SA', sassari: 'SS', savona: 'SV', siena: 'SI', siracusa: 'SR', sondrio: 'SO', 'sud sardegna': 'SU', taranto: 'TA', teramo: 'TE', terni: 'TR', torino: 'TO', trapani: 'TP', trento: 'TN', treviso: 'TV', trieste: 'TS', udine: 'UD', varese: 'VA', venezia: 'VE', 'verbano-cusio-ossola': 'VB', vercelli: 'VC', verona: 'VR', 'vibo valentia': 'VV', vicenza: 'VI', viterbo: 'VT' };

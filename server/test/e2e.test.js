@@ -97,7 +97,15 @@ test('flusso completo Shipments', async (t) => {
     const p = r.data.parsed;
     assert.equal(p[0].external_ref, 'AFF298672IT'); assert.equal(p[0].mode.code, 'STD_OUT'); assert.equal(p[0].zip, '92031'); assert.equal(p[0].province, 'AG'); assert.equal(p[0].phone, '00393342107111');
     assert.equal(p[1].mode.code, 'EXP_RET');
+    assert.equal(p[0].kit_known, false, 'codice non a magazzino segnalato');
     ctx.inbox = r.data.id;
+    // codice presente a magazzino, anche con formato diverso e due kit sullo stesso rigo, e inoltro con intestazione citata
+    const r2 = await A.post('/api/orders/inbox/paste', { text: 'Da: info@easydna.com\nOggetto: Kits to send out - KIT0003,KIT0004\n\nHi,\n\nKIT0003, KIT0004 - Express SDA\nMrs Carla Neri\nVia Pisa 2\nLucca\nLU\n55100\nItaly\nTEL: 333', subject: 'I: Kits to send out - KIT0003,KIT0004' });
+    assert.equal(r2.status, 201); assert.equal(r2.data.parsed.length, 2, JSON.stringify(r2.data.parsed));
+    assert.equal(r2.data.parsed[0].external_ref, 'KIT0003'); assert.equal(r2.data.parsed[0].in_stock, true); assert.equal(r2.data.parsed[0].mode.code, 'EXP_OUT'); assert.equal(r2.data.parsed[0].city, 'Lucca');
+    assert.equal(r2.data.parsed[1].in_stock, false, 'KIT0004 è scartato');
+    const ra = await A.post('/api/orders/inbox/reparse-all'); assert.equal(ra.status, 200); assert.ok(ra.data.total >= 2);
+    await A.post(`/api/orders/inbox/${r2.data.id}/ignore`);
     const items = p.map((x) => ({ project: 'ENDEAVOR', order_type: 'ENDEAVOR', external_ref: x.external_ref, shipping_mode_id: x.mode.id, patient_title: x.patient_title, patient_first_name: x.patient_first_name, patient_last_name: x.patient_last_name, address1: x.address1, address2: x.address2, city: x.city, province: x.province, zip: x.zip, country: x.country, phone: x.phone, lang: 'en' }));
     items[0].barcode = 'KIT0001';
     r = await A.post(`/api/orders/inbox/${ctx.inbox}/confirm`, { items });

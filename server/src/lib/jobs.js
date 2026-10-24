@@ -18,6 +18,7 @@ export async function pollInbox({ force = false } = {}) {
   const j = await res.json();
   const senderFilter = ((await getSetting('affinity_sender_filter', '')) || '').split(/[;,]/).map((s) => s.trim().toLowerCase()).filter(Boolean);
   const modes = await many('SELECT * FROM shipping_modes WHERE active');
+  const knownCodes = await many('SELECT barcode, status FROM kits');
   let created = 0; let last = sinceIso;
   for (const m of j.value || []) {
     last = m.receivedDateTime > last ? m.receivedDateTime : last;
@@ -28,7 +29,7 @@ export async function pollInbox({ force = false } = {}) {
     const looksLikeKit = /kit/i.test(m.subject || '') || /kit/i.test(text.slice(0, 400));
     const fromOk = !senderFilter.length || senderFilter.some((d) => from.toLowerCase().endsWith(d));
     if (!looksLikeKit && !fromOk) continue; // email estranea: non la importiamo
-    const parsed = parseKitEmail(text, modes);
+    const parsed = parseKitEmail(text, modes, { subject: m.subject || '', knownCodes });
     await q(`INSERT INTO inbox_messages (graph_id, source, received_at, from_addr, subject, body_text, parsed, status) VALUES ($1,'GRAPH',$2,$3,$4,$5,$6,$7)`,
       [m.id, m.receivedDateTime, from, m.subject || '', text, JSON.stringify(parsed), parsed.length ? 'PARSED' : 'NEW']);
     created++;

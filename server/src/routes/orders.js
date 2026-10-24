@@ -382,7 +382,7 @@ r.get('/inbox/:id(\\d+)', ah(async (req, res) => {
 r.post('/inbox/paste', requireRole(...OPERATORS), ah(async (req, res) => {
   const { text, subject, from_addr } = parse(z.object({ text: z.string().min(10).max(20000), subject: opt(z.string().max(200)), from_addr: opt(z.string().max(200)) }), req.body);
   const modes = await many('SELECT * FROM shipping_modes WHERE active');
-  const parsed = parseKitEmail(text, modes);
+  const parsed = parseKitEmail(text, modes, { subject: subject || '', knownCodes: await many('SELECT barcode, status FROM kits') });
   const row = await one(`INSERT INTO inbox_messages (source, from_addr, subject, body_text, parsed, status) VALUES ('PASTE',$1,$2,$3,$4,$5) RETURNING *`,
     [from_addr || null, subject || null, text, JSON.stringify(parsed), parsed.length ? 'PARSED' : 'NEW']);
   await audit(req, 'INBOX_PASTE', 'inbox', row.id, { blocks: parsed.length });
@@ -392,9 +392,23 @@ r.post('/inbox/:id(\\d+)/reparse', requireRole(...OPERATORS), ah(async (req, res
   const m = await one('SELECT * FROM inbox_messages WHERE id=$1', [Number(req.params.id)]);
   if (!m) throw notFound();
   const modes = await many('SELECT * FROM shipping_modes WHERE active');
-  const parsed = parseKitEmail(m.body_text || '', modes);
+  const parsed = parseKitEmail(m.body_text || '', modes, { subject: m.subject || '', knownCodes: await many('SELECT barcode, status FROM kits') });
   await q(`UPDATE inbox_messages SET parsed=$2, status=CASE WHEN status IN ('NEW','PARSED','ERROR') THEN $3 ELSE status END, error=NULL WHERE id=$1`, [m.id, JSON.stringify(parsed), parsed.length ? 'PARSED' : 'NEW']);
   res.json(await one('SELECT * FROM inbox_messages WHERE id=$1', [m.id]));
+}));
+// Rilegge tutte le email ancora da elaborare (dopo un carico a magazzino o un aggiornamento del riconoscitore)
+r.post('/inbox/reparse-all', requireRole(...OPERATORS), ah(async (req, res) => {
+  const modes = await many('SELECT * FROM shipping_modes WHERE active');
+  const knownCodes = await many('SELECT barcode, status FROM kits');
+  const msgs = await many(`SELECT id, subject, body_text FROM inbox_messages WHERE status IN ('NEW','PARSED','ERROR')`);
+  let recognized = 0;
+  for (const m of msgs) {
+    const parsed = parseKitEmail(m.body_text || '', modes, { subject: m.subject || '', knownCodes });
+    if (parsed.length) recognized++;
+    await q(`UPDATE inbox_messages SET parsed=$2, status=$3, error=NULL WHERE id=$1`, [m.id, JSON.stringify(parsed), parsed.length ? 'PARSED' : 'NEW']);
+  }
+  await audit(req, 'INBOX_REPARSE_ALL', 'inbox', null, { total: msgs.length, recognized });
+  res.json({ total: msgs.length, recognized });
 }));
 r.post('/inbox/:id(\\d+)/ignore', requireRole(...OPERATORS), ah(async (req, res) => {
   await q(`UPDATE inbox_messages SET status='IGNORED', processed_by=$2, processed_at=now() WHERE id=$1 AND status IN ('NEW','PARSED','ERROR')`, [Number(req.params.id), req.user.id]);
