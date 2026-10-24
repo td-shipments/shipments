@@ -33,19 +33,53 @@ export function htmlToText(html) {
     .replace(/\r/g, '').replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
 }
 
-// Riconosce la modalità di spedizione da una frase usando gli alias configurati nel tariffario
-export function matchMode(text, modes) {
-  const t = String(text || '').toLowerCase().replace(/\s+/g, ' ').trim();
-  if (!t) return null;
-  let best = null;
-  for (const m of modes) {
-    for (const alias of String(m.email_aliases || '').split('|').map((s) => s.trim().toLowerCase()).filter(Boolean)) {
-      if (t === alias || t.includes(alias)) {
-        if (!best || alias.length > best.len) best = { id: m.id, code: m.code, len: alias.length, exact: t === alias };
-      }
-    }
+// Riconosce la modalità di spedizione.
+// 1) frase breve uguale a un alias del tariffario (es. "Standard SDA", "Express Return SDA");
+// 2) altrimenti legge tutta la frase: ogni STANDARD/EXPRESS viene attribuito all'andata o al ritorno dal contesto
+//    (busta/envelope/reply/return/ritorno = ritorno; send/ship/kit by/andata = andata) e la coppia di tratte sceglie la modalità.
+const RETURN_CTX = /\b(return|reply|back|ritorno|rientro|restituzione|envelope|busta|prepaid|prepagat)/i;
+const OUT_CTX = /\b(send|ship|dispatch|deliver|kit by|outbound|andata|invio|spedire|spedizione del kit)/i;
+
+export function inferLegs(text) {
+  const t = String(text || '').replace(/\s+/g, ' ');
+  const re = /\b(standard|express)\b/gi;
+  const legs = { outbound: null, ret: null };
+  const undecided = [];
+  let m;
+  while ((m = re.exec(t))) {
+    const svc = m[1].toUpperCase();
+    const before = t.slice(Math.max(0, m.index - 40), m.index);
+    const after = t.slice(m.index, m.index + 45);
+    const byOut = /\b(kit|send|sent|ship|shipped|sending|spedire|spedito)\s+(it\s+|this\s+kit\s+|the\s+kit\s+)?(by|via|con|in)\s*$/i.test(before);
+    const retSig = /\b(envelope|busta|reply)\b/i.test(after) || /\b(return|ritorno|rientro|back)\b/i.test(after.slice(0, 30)) || /\b(return|reply|ritorno|rientro)\b/i.test(before.slice(-25));
+    const outSig = /\b(outbound|andata|only|solo)\b/i.test(after.slice(0, 30)) || /\b(send|ship|dispatch|invio|spedizione)\b/i.test(before.slice(-25));
+    let side = null;
+    if (byOut) side = 'outbound'; else if (retSig) side = 'ret'; else if (outSig) side = 'outbound';
+    if (side === 'outbound' && !legs.outbound) legs.outbound = svc;
+    else if (side === 'ret' && !legs.ret) legs.ret = svc;
+    else undecided.push(svc);
   }
-  return best ? { id: best.id, code: best.code, exact: best.exact } : null;
+  for (const svc of undecided) { if (!legs.outbound) legs.outbound = svc; else if (!legs.ret) legs.ret = svc; }
+  if (legs.outbound && !legs.ret && /\b(both ways|round trip|outbound and return|andata e ritorno|a\/r|go and return)\b/i.test(t)) legs.ret = legs.outbound;
+  if (!legs.outbound && !legs.ret) return null;
+  return legs;
+}
+
+export function matchMode(text, modes) {
+  const t = String(text || '').toLowerCase().replace(/\s+/g, ' ').replace(/[.,;:!]+$/, '').trim();
+  if (!t) return null;
+  const aliasesOf = (m) => String(m.email_aliases || '').split('|').map((x) => x.trim().toLowerCase()).filter(Boolean);
+  for (const m of modes) if (aliasesOf(m).includes(t) || [m.name_it, m.name_en].map((x) => String(x || '').toLowerCase()).includes(t)) return { id: m.id, code: m.code, exact: true };
+  const legs = inferLegs(t);
+  if (legs) {
+    const found = modes.find((m) => (m.outbound_service || null) === legs.outbound && (m.return_service || null) === legs.ret);
+    if (found) return { id: found.id, code: found.code, exact: false, legs };
+  }
+  let best = null;
+  for (const m of modes) for (const alias of aliasesOf(m)) if (t.includes(alias) && (!best || alias.length > best.len)) best = { id: m.id, code: m.code, len: alias.length };
+  if (best && !legs) return { id: best.id, code: best.code, exact: false };
+  if (legs) return { id: null, code: null, exact: false, legs }; // tratte lette ma nessuna modalità del tariffario le copre
+  return null;
 }
 
 const norm = (s) => String(s || '').toUpperCase().replace(/\s+/g, '');
@@ -168,6 +202,7 @@ export function parseKitEmail(text, modes = [], opts = {}) {
     if (rest.length) r.address2 = rest.join(', ');
     if (!r.address1) r.warnings.push('address');
     if (!r.city) r.warnings.push('city');
+    if (r.mode && !r.mode.id) { r.legs = r.mode.legs; r.mode = null; r.warnings.push('mode_no_tariff'); }
     if (!r.mode) r.warnings.push('mode');
     if (!r.kit_known) r.warnings.push('kit_unknown');
     else if (!r.in_stock) r.warnings.push('kit_not_available');

@@ -22,7 +22,7 @@ import Settings from './pages/Settings.jsx';
 import Audit from './pages/Audit.jsx';
 import Emails from './pages/Emails.jsx';
 import Profile from './pages/Profile.jsx';
-export const APP_VERSION = '1.3.2';
+export const APP_VERSION = '1.4.0';
 
 function ProjectShell({ proj }) {
   const { user, logout } = useAuth();

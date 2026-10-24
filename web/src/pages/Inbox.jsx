@@ -30,13 +30,13 @@ export default function Inbox({ project }) {
     try { const r = await api.post('/orders/inbox/paste', { text: paste.text, subject: paste.subject || null }); setPaste(null); inbox.reload(); if (r.status === 'PARSED') openReview(r); else toast(t('inbox.noKits'), 'err'); } catch (e) { setErr(e); }
   };
   const openReview = (m) => {
-    const items = (m.parsed || []).map((b) => ({ ...emptyOrder('ENDEAVOR'), external_ref: b.external_ref, shipping_mode_id: b.mode?.id || '', mode_text: b.mode_text, warnings: b.warnings || [], barcode: b.in_stock ? b.external_ref : '', in_stock: !!b.in_stock, kit_status: b.kit_status || null, patient_title: b.patient_title || '', patient_first_name: b.patient_first_name, patient_last_name: b.patient_last_name, address1: b.address1, address2: b.address2 || '', city: b.city, province: b.province || '', zip: b.zip || '', country: b.country || 'Italia', phone: b.phone || '', lang: 'en' }));
+    const items = (m.parsed || []).map((b) => ({ ...emptyOrder('ENDEAVOR'), external_ref: b.external_ref, shipping_mode_id: b.mode?.id || '', mode_text: b.mode_text, warnings: b.warnings || [], barcode: b.in_stock ? b.external_ref : '', in_stock: !!b.in_stock, kit_status: b.kit_status || null, legs: b.legs || null, notes: (b.mode_text || '').length > 30 ? b.mode_text : '', patient_title: b.patient_title || '', patient_first_name: b.patient_first_name, patient_last_name: b.patient_last_name, address1: b.address1, address2: b.address2 || '', city: b.city, province: b.province || '', zip: b.zip || '', country: b.country || 'Italia', phone: b.phone || '', lang: 'en' }));
     setReview({ msg: m, items: items.length ? items : [emptyOrder('ENDEAVOR')] });
   };
   const confirm = async () => {
     setErr(null);
     try {
-      const items = review.items.map(({ mode_text, warnings, in_stock, kit_status, ...x }) => ({ ...x, shipping_mode_id: x.shipping_mode_id || null, email: x.email || null, barcode: x.barcode || null }));
+      const items = review.items.map(({ mode_text, warnings, in_stock, kit_status, legs, ...x }) => ({ ...x, shipping_mode_id: x.shipping_mode_id || null, email: x.email || null, barcode: x.barcode || null }));
       const r = await api.post(`/orders/inbox/${review.msg.id}/confirm`, { items });
       toast(`${t('inbox.created')}: ${r.order_ids.length}`); setReview(null); inbox.reload(); newOrders.reload();
       if (r.order_ids.length === 1) nav(`/${p}/richieste/${r.order_ids[0]}`);
@@ -110,7 +110,7 @@ export default function Inbox({ project }) {
             {review.items.map((it, i) => (
               <div key={i} className={`blockcard ${it.warnings?.length ? 'warn' : ''}`}>
                 <div className="hd"><span className="ref">{it.external_ref || `#${i + 1}`}</span>
-                  <div className="row small">{it.mode_text && <span className="muted">{t('inbox.modeText')}: <b>{it.mode_text}</b></span>}{(it.warnings || []).map((w) => <Badge key={w} tone="red">{t(`inbox.warn.${w}`)}</Badge>)}
+                  <div className="row small">{it.mode_text && <span className="muted">{t('inbox.modeText')}: <b>{it.mode_text}</b></span>}{(it.warnings || []).filter((w) => w !== 'mode' || !it.legs).map((w) => <Badge key={w} tone="red">{w === 'mode_no_tariff' && it.legs ? t('inbox.warn.mode_no_tariff', { o: it.legs.outbound || '–', r: it.legs.ret || '–' }) : t(`inbox.warn.${w}`)}</Badge>)}
                     {review.items.length > 1 && <button className="btn sm ghost" onClick={() => setReview({ ...review, items: review.items.filter((_, j) => j !== i) })}>{t('c.delete')}</button>}</div></div>
                 <OrderForm value={it} onChange={(v) => setReview({ ...review, items: review.items.map((x, j) => (j === i ? v : x)) })} project="ENDEAVOR" modes={modes.data} compact />
               </div>))}

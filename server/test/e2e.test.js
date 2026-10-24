@@ -104,6 +104,10 @@ test('flusso completo Shipments', async (t) => {
     assert.equal(r2.status, 201); assert.equal(r2.data.parsed.length, 2, JSON.stringify(r2.data.parsed));
     assert.equal(r2.data.parsed[0].external_ref, 'KIT0003'); assert.equal(r2.data.parsed[0].in_stock, true); assert.equal(r2.data.parsed[0].mode.code, 'EXP_OUT'); assert.equal(r2.data.parsed[0].city, 'Lucca');
     assert.equal(r2.data.parsed[1].in_stock, false, 'KIT0004 è scartato');
+    // frase lunga con due tratte: andata Standard, ritorno Express
+    const r3 = await A.post('/api/orders/inbox/paste', { text: 'Hi,\n\nKIT0003 - Please open the kit, remove the reply envelope and include an EXPRESS SDA envelope instead to return this kit by STANDARD SDA - We will need both tracking numbers\n\nMiss. Michelina Merola\nvia antonio segni, 9,\nbaronissi\nSA\n84081\nItaly', subject: 'I: Kits to send out - KIT0003' });
+    assert.equal(r3.data.parsed.length, 1); assert.equal(r3.data.parsed[0].mode.code, 'STD_OUT_EXP_RET', JSON.stringify(r3.data.parsed[0])); assert.equal(r3.data.parsed[0].province, 'SA');
+    await A.post(`/api/orders/inbox/${r3.data.id}/ignore`);
     const ra = await A.post('/api/orders/inbox/reparse-all'); assert.equal(ra.status, 200); assert.ok(ra.data.total >= 2);
     await A.post(`/api/orders/inbox/${r2.data.id}/ignore`);
     const items = p.map((x) => ({ project: 'ENDEAVOR', order_type: 'ENDEAVOR', external_ref: x.external_ref, shipping_mode_id: x.mode.id, patient_title: x.patient_title, patient_first_name: x.patient_first_name, patient_last_name: x.patient_last_name, address1: x.address1, address2: x.address2, city: x.city, province: x.province, zip: x.zip, country: x.country, phone: x.phone, lang: 'en' }));
@@ -130,6 +134,7 @@ test('flusso completo Shipments', async (t) => {
     r = await A.post(`/api/orders/${ctx.o1}/ship`, { outbound_tracking: 'SDA123456789IT', shipped_at: '2026-10-02' });
     assert.equal(r.status, 200, JSON.stringify(r.data)); assert.equal(r.data.status, 'SHIPPED'); assert.equal(Number(r.data.fee_shipping), 6.8); assert.equal(r.data.fee_shipping_date, '2026-10-02');
     assert.equal(r.data.shipments.length, 1); assert.equal(r.data.shipments[0].direction, 'OUTBOUND'); assert.equal(r.data.shipments[0].service, 'STANDARD');
+    assert.ok(r.data.emails.some((e) => e.kind === 'AFFINITY_SHIP'), 'email ad Affinity con i tracking registrata');
     assert.equal((await A.get('/api/kits/lookup/KIT0001')).data.status, 'SHIPPED');
     const pdf = await A.raw(`/api/orders/${ctx.o1}/sheet.pdf?lang=en`); assert.equal(pdf.status, 200); assert.match(pdf.headers.get('content-type'), /pdf/);
     const buf = Buffer.from(await pdf.arrayBuffer()); assert.ok(buf.length > 3000); assert.equal(buf.subarray(0, 4).toString(), '%PDF');

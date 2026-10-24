@@ -229,7 +229,16 @@ r.post('/:id(\\d+)/ship', requireRole(...OPERATORS), ah(async (req, res) => {
           : `Gentile ${o.patient_first_name},\n\nil tuo kit è stato affidato al corriere SDA il ${itDate(dateOnly(o.shipped_at))}. Numero di tracciamento: ${out.tracking_number}\n${out.url}\n\nNella busta trovi le istruzioni e, dove prevista, l'etichetta prepagata per il ritorno del campione.` });
     }
   }
-  res.json(o);
+  // email ad Affinity / Endeavor con i numeri di tracciamento (richiesta ricorrente nelle loro email: "we will need both tracking numbers")
+  if (o.project === 'ENDEAVOR' && (await getSetting('notify_affinity_on_ship', 'true')) === 'true') {
+    const to = await getSetting('affinity_notify_emails', '');
+    const out = o.shipments.find((s) => s.direction === 'OUTBOUND');
+    const ret = o.shipments.find((s) => s.direction === 'RETURN');
+    if (to) await sendMail({ kind: 'AFFINITY_SHIP', refKey: `AFFINITY_SHIP:${o.id}`, orderId: o.id, to, lang: 'en', sentBy: req.user.id,
+      subject: `Kit ${o.barcode || ''} shipped · ${o.external_ref || ''} · ${o.patient_last_name}`, title: 'Kit shipped',
+      body: `Hello,\n\nkit ${o.barcode || '-'} (order ${o.external_ref || '#' + o.id}) for ${[o.patient_title, o.patient_first_name, o.patient_last_name].filter(Boolean).join(' ')}, ${o.city || ''}, was ${o.handover ? 'handed over' : 'handed to SDA'} on ${itDate(dateOnly(o.shipped_at))}.\n\nShipping mode: ${o.mode_en || '-'}\n${out ? `Outbound SDA waybill: ${out.tracking_number}\n${out.url}\n` : ''}${ret ? `Return SDA label: ${ret.tracking_number || 'to be communicated'}${ret.url ? `\n${ret.url}` : ''}\n` : ''}\nBest regards\nToscana Diagnostica · Shipments` });
+  }
+  res.json(await loadOrder(id));
 }));
 
 r.post('/:id(\\d+)/deliver', requireRole(...OPERATORS), ah(async (req, res) => {
