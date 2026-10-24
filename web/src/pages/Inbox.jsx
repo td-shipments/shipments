@@ -75,7 +75,7 @@ export default function Inbox({ project }) {
                   <div className="row">
                     {m.status === 'CONFIRMED' ? <span className="small">{t('inbox.created')}: {(m.order_ids || []).map((id) => <Link key={id} to={`/${p}/richieste/${id}`} className="chip">#{id}</Link>)}</span>
                       : m.status === 'IGNORED' ? <Badge>{t('inbox.ignored')}</Badge>
-                        : <>{(m.parsed || []).length ? <Badge tone="blue">{(m.parsed || []).length} {t('inbox.kits')}</Badge> : <Badge tone="red">{t('inbox.noKits')}</Badge>}
+                        : <>{(() => { const ps = m.parsed || []; const ok = ps.filter((b) => b.in_stock).length; if (!ps.length) return <Badge tone="red">{t('inbox.noKits')}</Badge>; if (ok === ps.length) return <Badge tone="green">{ok} {t('inbox.kitsInStock')}</Badge>; if (ok === 0) return <Badge tone="red">{ps.length > 1 ? t('inbox.kitsNotInStock') : t('inbox.kitNotInStock')}</Badge>; return <Badge tone="mauve">{t('inbox.kitsPartial', { a: ok, b: ps.length })}</Badge>; })()}
                           {op && <><button className="btn sm" onClick={() => openReview(m)}>{t('inbox.review')}</button><button className="btn sm ghost" onClick={() => reparse(m)}>{t('inbox.reparse')}</button><button className="btn sm ghost" onClick={() => ignore(m)}>{t('inbox.ignore')}</button></>}</>}
                   </div>
                 </div>

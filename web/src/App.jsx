@@ -22,6 +22,7 @@ import Settings from './pages/Settings.jsx';
 import Audit from './pages/Audit.jsx';
 import Emails from './pages/Emails.jsx';
 import Profile from './pages/Profile.jsx';
+export const APP_VERSION = '1.3.2';
 
 function ProjectShell({ proj }) {
   const { user, logout } = useAuth();
@@ -85,7 +86,7 @@ function ProjectShell({ proj }) {
         </nav>
         <div className="me">
           <div className="name">{user.full_name}</div>
-          <div>{t(`role.${user.role}`)}</div>
+          <div>{t(`role.${user.role}`)} <span className="mini" style={{ opacity: .7 }}>· v{APP_VERSION}</span></div>
           <div className="row" style={{ marginTop: 8 }}>
             <NavLink to={`${base}/profilo`} className="btn sm ghost" style={{ color: 'var(--teal)' }}>{t('nav.profile')}</NavLink>
             <button className="btn sm dark" onClick={logout}>{t('nav.logout')}</button>
